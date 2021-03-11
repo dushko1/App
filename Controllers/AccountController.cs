@@ -7,6 +7,7 @@ using API.Data;
 using API.DTOs;
 using API.Entities;
 using API.Interfaces;
+using AutoMapper;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,9 +17,11 @@ namespace API.Controllers
     {
         private readonly DataContext context;
         private readonly ITokenInterface tokenInterface;
+        private readonly IMapper mapper;
 
-        public AccountController(DataContext context, ITokenInterface tokenInterface)
+        public AccountController(DataContext context, ITokenInterface tokenInterface, IMapper mapper)
         {
+            this.mapper = mapper;
             this.tokenInterface = tokenInterface;
             this.context = context;
         }
@@ -30,19 +33,20 @@ namespace API.Controllers
             {
                 return BadRequest("Username is taken");
             }
-            using var hmac = new HMACSHA512();
-            var user = new AppUser
-            {
-                UserName = dto.Username.ToLower(),
-                PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(dto.Password)),
-                PasswordSalt = hmac.Key
+            var user = mapper.Map<AppUser>(dto);
 
-            };
+            using var hmac = new HMACSHA512();
+
+            user.UserName = dto.Username.ToLower();
+            user.PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(dto.Password));
+            user.PasswordSalt = hmac.Key;
             context.Users.Add(user);
             await context.SaveChangesAsync();
-            return new UserDto{
-                Username=user.UserName,
-                Token=tokenInterface.CreateToken(user)
+            return new UserDto
+            {
+                Username = user.UserName,
+                Token = tokenInterface.CreateToken(user),
+                KnownAs=user.KnownAs
             };
 
         }
@@ -50,7 +54,7 @@ namespace API.Controllers
         [HttpPost("login")]
         public async Task<ActionResult<UserDto>> Login(LoginDto dto)
         {
-            var user = await context.Users.Include(p=>p.Photos)
+            var user = await context.Users.Include(p => p.Photos)
             .SingleOrDefaultAsync(x => x.UserName == dto.Username);
             if (user == null) return Unauthorized("Invalid username");
             using var hmac = new HMACSHA512(user.PasswordSalt);
@@ -61,9 +65,10 @@ namespace API.Controllers
             }
             return new UserDto
             {
-                Username=user.UserName,
-                Token=tokenInterface.CreateToken(user),
-                photoUrl=user.Photos.FirstOrDefault(x=>x.isMain)?.url
+                Username = user.UserName,
+                Token = tokenInterface.CreateToken(user),
+                photoUrl = user.Photos.FirstOrDefault(x => x.isMain)?.url,
+                KnownAs=user.KnownAs
             };
 
         }

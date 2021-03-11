@@ -29,7 +29,7 @@ namespace API
             catch(Exception ex)
             {
                 var logger=services.GetRequiredService<Logger<Program>>();
-                logger.LogError(ex,"AAn error occured");
+                logger.LogError(ex,"An error occured");
 
             }
             await host.RunAsync();
